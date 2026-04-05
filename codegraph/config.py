@@ -1,12 +1,24 @@
-"""Runtime configuration loaded from environment variables.
+"""Runtime configuration loaded from .env files and environment variables.
 
 Single source of truth for CodeGraph settings. Does NOT define node shapes or I/O behavior.
+
+Load order (later overrides earlier):
+  1. ~/.codegraph/.env   -- global user defaults
+  2. ./.env              -- project-specific overrides
+  3. Real env vars       -- explicit shell exports always win
 """
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+
+from dotenv import load_dotenv
+
+_CODEGRAPH_DIR = os.path.join(os.path.expanduser("~"), ".codegraph")
+
+load_dotenv(os.path.join(_CODEGRAPH_DIR, ".env"), override=False)
+load_dotenv(override=True)
 
 
 @dataclass
@@ -28,7 +40,7 @@ class CodeGraphConfig:
 
 
 def _default_sqlite_path() -> str:
-    return os.path.join(os.path.expanduser("~"), ".codegraph", "codegraph.db")
+    return os.path.join(_CODEGRAPH_DIR, "codegraph.db")
 
 
 def load_config() -> CodeGraphConfig:

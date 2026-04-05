@@ -70,7 +70,7 @@ All settings are read from environment variables with `CODEGRAPH_` prefix.
 
 | Variable | Default | Description |
 |---|---|---|
-| `CODEGRAPH_SQLITE_PATH` | `./codegraph.db` | SQLite database path |
+| `CODEGRAPH_SQLITE_PATH` | `~/.codegraph/codegraph.db` | SQLite database path |
 | `CODEGRAPH_VECTOR_DB_URL` | *(empty)* | Vector DB URL (empty = disabled) |
 | `CODEGRAPH_VECTOR_DB_TYPE` | *(empty)* | `qdrant` or `chroma` |
 | `CODEGRAPH_VECTOR_COLLECTION` | `codegraph` | Vector collection name |
@@ -87,22 +87,36 @@ All settings are read from environment variables with `CODEGRAPH_` prefix.
 
 ### Using an env file
 
-An `example.env` is included in the repo. Copy it, adjust the values, and source it before running commands:
+CodeGraph **automatically loads `.env` files** -- no need to `source` anything. It checks two locations (later overrides earlier):
+
+1. `~/.codegraph/.env` -- global user defaults (applied everywhere)
+2. `./.env` in the current working directory -- project-specific overrides
+3. Real shell environment variables always take highest priority
+
+An `example.env` is included in the repo. To get started:
 
 ```bash
+# project-specific config
 cp example.env .env
-# edit .env to match your setup
-source .env && codegraph parse /path/to/repo
-source .env && codegraph serve
+# uncomment and edit the values you want to change
+
+# or set global defaults
+mkdir -p ~/.codegraph
+cp example.env ~/.codegraph/.env
 ```
 
-You can also pass one-off overrides inline:
+Then just run commands normally -- values are picked up automatically:
+
+```bash
+codegraph parse /path/to/repo
+codegraph serve
+```
+
+You can still pass one-off overrides inline:
 
 ```bash
 CODEGRAPH_SQLITE_PATH=./custom.db CODEGRAPH_MCP_PORT=9999 codegraph serve
 ```
-
-Or use [direnv](https://direnv.net/) for automatic per-directory loading -- create a `.envrc` with your exports and run `direnv allow`.
 
 ## Visualising the Code Graph
 
