@@ -12,15 +12,23 @@ if TYPE_CHECKING:
     import networkx as nx
 
 
+_GEXF_SAFE = (str, int, float, bool)
+
+
 class NetworkXExporter:
     """Build a directed graph with node and edge attributes."""
+
+    @staticmethod
+    def _sanitize(attrs: dict[str, Any]) -> dict[str, Any]:
+        """Keep only GEXF-safe scalar values; drop None, lists, dicts."""
+        return {k: v for k, v in attrs.items() if isinstance(v, _GEXF_SAFE)}
 
     def export(self, graph: CodeGraph) -> Any:
         import networkx as nx  # noqa: PLC0415 — lazy import
 
         G = nx.DiGraph()
         for n in graph.nodes:
-            G.add_node(n.id, **n.to_dict())
+            G.add_node(n.id, **self._sanitize(n.to_dict()))
         for n in graph.nodes:
             for e in n.edges:
                 G.add_edge(

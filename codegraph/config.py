@@ -27,10 +27,14 @@ class CodeGraphConfig:
     mcp_transport: str
 
 
+def _default_sqlite_path() -> str:
+    return os.path.join(os.path.expanduser("~"), ".codegraph", "codegraph.db")
+
+
 def load_config() -> CodeGraphConfig:
     """Load configuration from CODEGRAPH_* environment variables."""
     return CodeGraphConfig(
-        sqlite_path=os.environ.get("CODEGRAPH_SQLITE_PATH", "./codegraph.db"),
+        sqlite_path=os.environ.get("CODEGRAPH_SQLITE_PATH", _default_sqlite_path()),
         vector_db_url=os.environ.get("CODEGRAPH_VECTOR_DB_URL", ""),
         vector_db_type=os.environ.get("CODEGRAPH_VECTOR_DB_TYPE", ""),
         vector_collection=os.environ.get("CODEGRAPH_VECTOR_COLLECTION", "codegraph"),
