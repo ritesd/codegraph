@@ -99,6 +99,7 @@ def main() -> None:
             print(json.dumps(d, indent=2))
     elif args.cmd == "export":
         store = SQLiteStore(cfg.sqlite_path)
+        store.init_db()
         nodes = store.get_by_repo(args.repo)
         from codegraph.core.graph import CodeGraph
 
@@ -121,10 +122,12 @@ def main() -> None:
         serve_main(host=args.host, port=args.port, transport=args.transport)
     elif args.cmd == "list-repos":
         store = SQLiteStore(cfg.sqlite_path)
+        store.init_db()
         for r in store.list_repos():
             print(r)
     elif args.cmd == "stats":
         store = SQLiteStore(cfg.sqlite_path)
+        store.init_db()
         nodes = store.get_by_repo(args.repo)
         by_type: dict[str, int] = {}
         by_lang: dict[str, int] = {}

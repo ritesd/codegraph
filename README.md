@@ -85,6 +85,89 @@ All settings are read from environment variables with `CODEGRAPH_` prefix.
 | `CODEGRAPH_MCP_PORT` | `8765` | MCP server port |
 | `CODEGRAPH_MCP_TRANSPORT` | `sse` | `stdio`, `sse`, or `streamable-http` |
 
+### Using an env file
+
+An `example.env` is included in the repo. Copy it, adjust the values, and source it before running commands:
+
+```bash
+cp example.env .env
+# edit .env to match your setup
+source .env && codegraph parse /path/to/repo
+source .env && codegraph serve
+```
+
+You can also pass one-off overrides inline:
+
+```bash
+CODEGRAPH_SQLITE_PATH=./custom.db CODEGRAPH_MCP_PORT=9999 codegraph serve
+```
+
+Or use [direnv](https://direnv.net/) for automatic per-directory loading -- create a `.envrc` with your exports and run `direnv allow`.
+
+## Visualising the Code Graph
+
+### Quick stats (terminal)
+
+```bash
+codegraph stats my-repo
+```
+
+Returns node counts by type and language, average edge confidence, and unresolved edge ratio.
+
+### Export to JSON
+
+```bash
+codegraph export my-repo --fmt json --json-mode graph
+```
+
+Writes `./codegraph_output/my-repo.json` with `nodes`, `edges`, and `meta`. Use any JSON viewer, or feed the `edges` array (which has `source`/`target` keys) directly into a D3 force-directed graph.
+
+### Export to GEXF and open in Gephi
+
+```bash
+codegraph export my-repo --fmt networkx
+```
+
+Writes `./codegraph_output/my-repo.gexf`. Open in [Gephi](https://gephi.org/) for an interactive graph -- colour nodes by `language` or `node_type`, size by degree, and use layout algorithms like ForceAtlas2.
+
+### NetworkX + matplotlib (Python script)
+
+```python
+import json
+import networkx as nx
+import matplotlib.pyplot as plt
+
+with open("./codegraph_output/my-repo.json") as f:
+    data = json.load(f)
+
+G = nx.DiGraph()
+for nid, ndata in data["nodes"].items():
+    G.add_node(nid, label=ndata["name"], node_type=ndata["node_type"])
+for e in data["edges"]:
+    G.add_edge(e["source"], e["target"])
+
+color_map = {"CLASS": "#4285f4", "FUNCTION": "#34a853", "METHOD": "#fbbc05", "EXTERNAL": "#ea4335"}
+colors = [color_map.get(G.nodes[n].get("node_type", ""), "#999") for n in G.nodes]
+
+plt.figure(figsize=(16, 12))
+pos = nx.spring_layout(G, k=0.5, iterations=50)
+nx.draw(G, pos, node_color=colors, node_size=60, edge_color="#cccccc",
+        with_labels=False, arrows=True, arrowsize=8)
+plt.title("CodeGraph")
+plt.savefig("codegraph-viz.png", dpi=150)
+plt.show()
+```
+
+### Browse SQLite directly
+
+The database is a standard SQLite file:
+
+```bash
+sqlite3 codegraph.db "SELECT name, node_type, language FROM nodes WHERE repo='my-repo' LIMIT 20"
+```
+
+Or open it in [DB Browser for SQLite](https://sqlitebrowser.org/) for interactive filtering.
+
 ## Development
 
 ```bash
