@@ -74,8 +74,14 @@ All settings are read from environment variables with `CODEGRAPH_` prefix.
 | `CODEGRAPH_VECTOR_DB_URL` | *(empty)* | Vector DB URL (empty = disabled) |
 | `CODEGRAPH_VECTOR_DB_TYPE` | *(empty)* | `qdrant` or `chroma` |
 | `CODEGRAPH_VECTOR_COLLECTION` | `codegraph` | Vector collection name |
-| `CODEGRAPH_LLM_ENDPOINT` | *(empty)* | OpenAI-compatible endpoint (empty = disabled) |
+| `CODEGRAPH_LLM_ENDPOINT` | *(empty)* | Summary endpoint (empty = disabled) |
 | `CODEGRAPH_LLM_MODEL` | `mistral:7b-instruct-q4_K_M` | Model name for summaries |
+| `CODEGRAPH_LLM_API_KEY` | *(empty)* | API key (Bearer token for OpenAI; api-key header for Azure) |
+| `CODEGRAPH_LLM_API_VERSION` | *(empty)* | Azure API version (e.g. `2024-06-01`); enables Azure mode when set |
+| `CODEGRAPH_EMBEDDING_ENDPOINT` | *(falls back to LLM_ENDPOINT)* | Embedding endpoint |
+| `CODEGRAPH_EMBEDDING_MODEL` | `nomic-embed-text` | Model name for embeddings |
+| `CODEGRAPH_EMBEDDING_API_KEY` | *(falls back to LLM_API_KEY)* | API key for embedding endpoint |
+| `CODEGRAPH_EMBEDDING_API_VERSION` | *(falls back to LLM_API_VERSION)* | Azure API version for embedding endpoint |
 | `CODEGRAPH_DEFAULT_MODE` | `full` | `full` or `incremental` |
 | `CODEGRAPH_INCLUDE_EXTERNAL_NODES` | `true` | Create nodes for third-party symbols |
 | `CODEGRAPH_MAX_FILE_SIZE_KB` | `500` | Skip files larger than this |
@@ -116,6 +122,51 @@ You can still pass one-off overrides inline:
 
 ```bash
 CODEGRAPH_SQLITE_PATH=./custom.db CODEGRAPH_MCP_PORT=9999 codegraph serve
+```
+
+### Provider examples
+
+**Local (Ollama)** -- no API key needed:
+
+```env
+CODEGRAPH_LLM_ENDPOINT=http://localhost:11434
+CODEGRAPH_LLM_MODEL=mistral:7b-instruct-q4_K_M
+CODEGRAPH_EMBEDDING_ENDPOINT=http://localhost:11434
+CODEGRAPH_EMBEDDING_MODEL=nomic-embed-text
+```
+
+**OpenAI** -- uses `Authorization: Bearer <key>` header:
+
+```env
+CODEGRAPH_LLM_ENDPOINT=https://api.openai.com
+CODEGRAPH_LLM_MODEL=gpt-4o-mini
+CODEGRAPH_LLM_API_KEY=sk-...
+CODEGRAPH_EMBEDDING_ENDPOINT=https://api.openai.com
+CODEGRAPH_EMBEDDING_MODEL=text-embedding-3-small
+CODEGRAPH_EMBEDDING_API_KEY=sk-...
+```
+
+**Azure OpenAI** -- uses `api-key` header and `api-version` query parameter:
+
+```env
+CODEGRAPH_LLM_ENDPOINT=https://myresource.openai.azure.com/openai/deployments/gpt-4o-mini
+CODEGRAPH_LLM_MODEL=gpt-4o-mini
+CODEGRAPH_LLM_API_KEY=<azure-key>
+CODEGRAPH_LLM_API_VERSION=2024-06-01
+CODEGRAPH_EMBEDDING_ENDPOINT=https://myresource.openai.azure.com/openai/deployments/text-embedding-3-small
+CODEGRAPH_EMBEDDING_MODEL=text-embedding-3-small
+CODEGRAPH_EMBEDDING_API_KEY=<azure-key>
+CODEGRAPH_EMBEDDING_API_VERSION=2024-06-01
+```
+
+**Mix and match** -- use different providers for summaries and embeddings:
+
+```env
+CODEGRAPH_LLM_ENDPOINT=https://api.openai.com
+CODEGRAPH_LLM_MODEL=gpt-4o-mini
+CODEGRAPH_LLM_API_KEY=sk-...
+CODEGRAPH_EMBEDDING_ENDPOINT=http://localhost:11434
+CODEGRAPH_EMBEDDING_MODEL=nomic-embed-text
 ```
 
 ## Visualising the Code Graph

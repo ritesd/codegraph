@@ -15,6 +15,8 @@ from codegraph.output.networkx_exporter import NetworkXExporter
 from codegraph.storage.sqlite_store import SQLiteStore
 from codegraph.storage.vector_store import VectorStore
 
+log = logging.getLogger("codegraph")
+
 
 def _setup_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -32,6 +34,7 @@ def main() -> None:
     p_parse.add_argument("--export-fmt", choices=("graph", "flat"), default="graph")
     p_parse.add_argument("--output-dir", default=CONFIG.output_dir)
     p_parse.add_argument("--llm-endpoint", default="")
+    p_parse.add_argument("--embedding-endpoint", default="")
     p_parse.add_argument("--vector-db-url", default="")
 
     p_query = sub.add_parser("query", help="Query nodes by name")
@@ -62,21 +65,29 @@ def main() -> None:
     if args.cmd == "parse":
         if getattr(args, "llm_endpoint", ""):
             os.environ["CODEGRAPH_LLM_ENDPOINT"] = args.llm_endpoint
-            cfg = load_config()
+        if getattr(args, "embedding_endpoint", ""):
+            os.environ["CODEGRAPH_EMBEDDING_ENDPOINT"] = args.embedding_endpoint
         if getattr(args, "vector_db_url", ""):
             os.environ["CODEGRAPH_VECTOR_DB_URL"] = args.vector_db_url
-            cfg = load_config()
+        cfg = load_config()
         gb = GraphBuilder(cfg)
         g = gb.build(args.repo_path, mode=args.mode)
         summer = Summarizer(cfg)
         if summer.enabled:
+            log.info("Generating summaries via %s ...", cfg.llm_endpoint)
             summer.summarize_batch(g.nodes)
         vec = VectorStore(cfg)
-        if vec.enabled:
+        if vec.enabled and summer.embedding_enabled:
+            stored = 0
+            log.info("Generating embeddings via %s ...", cfg.embedding_endpoint)
             for n in g.nodes:
                 emb = summer.generate_embedding(n)
                 if emb:
                     vec.upsert_node(n, emb)
+                    stored += 1
+            log.info("Stored %d/%d vectors in %s", stored, len(g.nodes), cfg.vector_db_type)
+        elif vec.enabled and not summer.embedding_enabled:
+            log.warning("Vector DB configured but CODEGRAPH_EMBEDDING_ENDPOINT is not set; skipping embeddings")
         if args.export == "json":
             out = os.path.join(args.output_dir, f"{g.repo}.json")
             JsonExporter().to_file(g, out, mode=args.export_fmt)

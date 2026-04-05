@@ -29,6 +29,12 @@ class CodeGraphConfig:
     vector_collection: str
     llm_endpoint: str
     llm_model: str
+    llm_api_key: str
+    llm_api_version: str
+    embedding_endpoint: str
+    embedding_model: str
+    embedding_api_key: str
+    embedding_api_version: str
     default_mode: str
     include_external_nodes: bool
     max_file_size_kb: int
@@ -52,6 +58,21 @@ def load_config() -> CodeGraphConfig:
         vector_collection=os.environ.get("CODEGRAPH_VECTOR_COLLECTION", "codegraph"),
         llm_endpoint=os.environ.get("CODEGRAPH_LLM_ENDPOINT", ""),
         llm_model=os.environ.get("CODEGRAPH_LLM_MODEL", "mistral:7b-instruct-q4_K_M"),
+        llm_api_key=os.environ.get("CODEGRAPH_LLM_API_KEY", ""),
+        llm_api_version=os.environ.get("CODEGRAPH_LLM_API_VERSION", ""),
+        embedding_endpoint=os.environ.get(
+            "CODEGRAPH_EMBEDDING_ENDPOINT",
+            os.environ.get("CODEGRAPH_LLM_ENDPOINT", ""),
+        ),
+        embedding_model=os.environ.get("CODEGRAPH_EMBEDDING_MODEL", "nomic-embed-text"),
+        embedding_api_key=os.environ.get(
+            "CODEGRAPH_EMBEDDING_API_KEY",
+            os.environ.get("CODEGRAPH_LLM_API_KEY", ""),
+        ),
+        embedding_api_version=os.environ.get(
+            "CODEGRAPH_EMBEDDING_API_VERSION",
+            os.environ.get("CODEGRAPH_LLM_API_VERSION", ""),
+        ),
         default_mode=os.environ.get("CODEGRAPH_DEFAULT_MODE", "full"),
         include_external_nodes=os.environ.get("CODEGRAPH_INCLUDE_EXTERNAL_NODES", "true").lower()
         in ("1", "true", "yes"),
