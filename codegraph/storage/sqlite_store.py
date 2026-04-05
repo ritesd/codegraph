@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -50,6 +51,9 @@ class SQLiteStore:
         return conn
 
     def init_db(self) -> None:
+        parent = os.path.dirname(os.path.abspath(self.db_path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         with self._lock, self._conn() as conn:
             conn.executescript(DDL)
 
