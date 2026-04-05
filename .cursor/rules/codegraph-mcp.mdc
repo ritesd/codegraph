@@ -1,0 +1,102 @@
+---
+description: Guidelines for using CodeGraph MCP tools with minimal token usage
+globs:
+alwaysApply: false
+---
+
+# CodeGraph MCP -- Token-Efficient Usage
+
+You have access to a CodeGraph MCP server that exposes tools for querying a
+multi-language code graph (Python, JS/TS, Go, Java). Every tool response
+includes full node dictionaries with `code_str`, `edges`, `metadata`, etc.
+Responses can be large. Follow these rules to minimise token consumption.
+
+## Tool inventory (smallest to largest response)
+
+| Tool | Typical size | When to use |
+|------|-------------|-------------|
+| `list_repos` | Tiny (list of strings) | First call -- check if repo is already indexed |
+| `get_node` | Small-medium (one node) | Lookup a specific symbol by name or id |
+| `get_class_tree` | Medium (class + methods) | Explore a class and its methods |
+| `get_neighbors` | Medium-large (node + N neighbors) | Find callers, callees, imports of a node |
+| `get_call_chain` | Medium-large (chain of nodes) | Trace call flow up or downstream |
+| `search_nodes` | Large (all matches, no pagination) | Filter nodes by type/name/file/language |
+| `parse_repo` | Small (summary only) | Index a repo for the first time |
+| `incremental_update` | Small (summary only) | Re-index after code changes |
+| `export_graph` | Very large (entire graph) | ONLY when user explicitly requests full export |
+
+## Decision flowchart
+
+1. **Is the repo already indexed?**
+   Call `list_repos` first. If the repo appears, skip `parse_repo`.
+
+2. **Need to index or re-index?**
+   - First time: `parse_repo(repo_path, mode="full")`
+   - After edits: `incremental_update(repo_path)` (faster, fewer nodes re-parsed)
+   - NEVER call `parse_repo` with `mode="full"` on an already-indexed repo unless
+     the user explicitly asks for a full re-parse.
+
+3. **Looking up a known symbol?**
+   Use `get_node(name="SymbolName", repo="repo-name")`. This returns exactly one
+   node. Do NOT use `search_nodes` when you already know the exact name.
+
+4. **Exploring a class?**
+   Prefer `get_class_tree(class_node_id)` over `get_neighbors`. It returns the
+   class node plus its direct method children -- compact and complete.
+
+5. **Finding callers or callees?**
+   Use `get_neighbors(node_id, edge_types=["CALLS"], min_confidence=0.5)` or
+   `get_neighbors(node_id, edge_types=["CALLED_BY"], min_confidence=0.5)`.
+   ALWAYS pass `edge_types` to filter -- omitting it returns every edge type.
+   ALWAYS set `min_confidence >= 0.5` to prune speculative/dynamic edges.
+
+6. **Tracing a call chain?**
+   Use `get_call_chain(node_id, direction="downstream", max_depth=3, min_confidence=0.5)`.
+   - Default `max_depth` is 5 -- override to **3** unless the user asks for deeper.
+   - ALWAYS set `min_confidence >= 0.5`.
+   - Choose `direction`: `"downstream"` follows CALLS; `"upstream"` follows CALLED_BY.
+
+7. **Searching across the repo?**
+   Use `search_nodes` with **at least two filters**:
+   - `node_type` (e.g. `"CLASS"`, `"FUNCTION"`, `"METHOD"`)
+   - `name_pattern` (substring or fnmatch glob, e.g. `"*Handler"`)
+   - `file_path` (substring match on stored path, e.g. `"parsers/"`)
+   - `language` (e.g. `"python"`, `"java"`)
+
+   NEVER call `search_nodes` with only `repo` and no other filters -- this
+   returns every node in the repo and wastes thousands of tokens.
+
+8. **Full graph export?**
+   ONLY call `export_graph` when the user explicitly asks for a full JSON/NetworkX
+   dump. This can return megabytes of data. Prefer targeted queries instead.
+
+## Anti-patterns to avoid
+
+- Calling `parse_repo` before checking `list_repos`.
+- Calling `search_nodes(repo="x")` with no type/name/file/language filters.
+- Calling `get_neighbors` without `edge_types` -- returns all edge types.
+- Using `max_depth > 3` on `get_call_chain` without explicit user request.
+- Using `min_confidence=0.0` -- includes dynamic/speculative edges (noisy).
+- Calling `export_graph` to answer a question about a single node or class.
+- Re-running `parse_repo(mode="full")` when `incremental_update` suffices.
+
+## Composing multi-step queries efficiently
+
+**Example: "What calls the `build` method in `GraphBuilder`?"**
+
+```
+1. list_repos                                         -> confirm repo is indexed
+2. get_node(name="build", repo="codegraph")           -> get node_id
+3. get_neighbors(node_id=..., edge_types=["CALLED_BY"], min_confidence=0.5)
+```
+
+Three calls, each small. Do NOT jump to `search_nodes` or `export_graph`.
+
+**Example: "Show me all parsers and their class trees"**
+
+```
+1. search_nodes(repo="codegraph", node_type="CLASS", name_pattern="*Parser")
+2. For each class_node_id -> get_class_tree(class_node_id)
+```
+
+Two rounds. The search is filtered by type + pattern so it stays compact.
