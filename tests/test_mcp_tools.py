@@ -18,3 +18,5 @@ def test_register_tools():
     names = asyncio.run(run())
     assert "parse_repo" in names
     assert "get_node" in names
+    assert "get_nodes_by_id" in names
+    assert "get_change_impact" in names
