@@ -12,7 +12,7 @@ from codegraph.core.graph import CodeGraph
 class JsonExporter:
     """Serialize CodeGraph to dict / file."""
 
-    def export(self, graph: CodeGraph, mode: str = "graph") -> dict[str, Any]:
+    def export(self, graph: CodeGraph, mode: str = "graph", *, include_code: bool = True) -> dict[str, Any]:
         meta = {
             "repo": graph.repo,
             "repo_root": graph.repo_root,
@@ -36,16 +36,25 @@ class JsonExporter:
                     }
                 )
         meta["edge_count"] = len(edges_out)
+        node_dict = (lambda n: n.to_dict() if include_code else n.to_slim_dict())
         if mode == "flat":
             return {
                 "meta": meta,
-                "nodes": [n.to_dict() for n in graph.nodes],
+                "nodes": [node_dict(n) for n in graph.nodes],
             }
-        nodes_map = {n.id: n.to_dict() for n in graph.nodes}
+        nodes_map = {n.id: node_dict(n) for n in graph.nodes}
         return {"meta": meta, "nodes": nodes_map, "edges": edges_out}
 
-    def to_file(self, graph: CodeGraph, output_path: str, mode: str = "graph", indent: int = 2) -> None:
-        d = self.export(graph, mode=mode)
+    def to_file(
+        self,
+        graph: CodeGraph,
+        output_path: str,
+        mode: str = "graph",
+        indent: int = 2,
+        *,
+        include_code: bool = True,
+    ) -> None:
+        d = self.export(graph, mode=mode, include_code=include_code)
         parent = os.path.dirname(os.path.abspath(output_path))
         if parent:
             os.makedirs(parent, exist_ok=True)

@@ -27,3 +27,8 @@ def test_json_export_graph_mode():
     d = JsonExporter().export(g, mode="graph")
     assert "nodes" in d and isinstance(d["nodes"], dict)
     assert d["meta"]["node_count"] == 1
+
+    slim = JsonExporter().export(g, mode="graph", include_code=False)
+    node = slim["nodes"]["f1"]
+    assert "edge_count" in node and node["edge_count"] == 0
+    assert "code_str" not in node

@@ -64,6 +64,59 @@ python -m codegraph.mcp.server --transport sse --host 0.0.0.0 --port 8765
 
 Available tools: `parse_repo`, `get_node`, `get_neighbors`, `search_nodes`, `get_class_tree`, `export_graph`, `incremental_update`, `list_repos`, `get_call_chain`.
 
+### Cursor MCP (`mcp.json`)
+
+Add CodeGraph to Cursor via **Settings → MCP** or by editing `~/.cursor/mcp.json`. Use the full path to `codegraph` if it is not on your PATH (often `~/.local/bin/codegraph` after `uv tool install`).
+
+**Option 1 -- stdio (recommended)** -- Cursor starts the server; no separate process.
+
+```json
+{
+  "mcpServers": {
+    "codegraph": {
+      "command": "/Users/yourname/.local/bin/codegraph",
+      "args": ["serve", "--transport", "stdio"]
+    }
+  }
+}
+```
+
+**Option 2 -- SSE** -- start the server yourself, then point Cursor at it:
+
+```bash
+codegraph serve --transport sse --host 127.0.0.1 --port 8765
+```
+
+```json
+{
+  "mcpServers": {
+    "codegraph": {
+      "url": "http://127.0.0.1:8765/sse"
+    }
+  }
+}
+```
+
+**Optional env overrides** (stdio mode; otherwise `~/.codegraph/.env` is loaded automatically):
+
+```json
+{
+  "mcpServers": {
+    "codegraph": {
+      "command": "/Users/yourname/.local/bin/codegraph",
+      "args": ["serve", "--transport", "stdio"],
+      "env": {
+        "CODEGRAPH_SQLITE_PATH": "/Users/yourname/.codegraph/codegraph.db",
+        "CODEGRAPH_VECTOR_DB_URL": "http://localhost:6333",
+        "CODEGRAPH_VECTOR_DB_TYPE": "qdrant",
+        "CODEGRAPH_EMBEDDING_ENDPOINT": "http://localhost:11434",
+        "CODEGRAPH_EMBEDDING_MODEL": "nomic-embed-text"
+      }
+    }
+  }
+}
+```
+
 ## Configuration
 
 All settings are read from environment variables with `CODEGRAPH_` prefix.

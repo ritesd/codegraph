@@ -7,23 +7,31 @@ alwaysApply: false
 # CodeGraph MCP -- Token-Efficient Usage
 
 You have access to a CodeGraph MCP server that exposes tools for querying a
-multi-language code graph (Python, JS/TS, Go, Java). Every tool response
-includes full node dictionaries with `code_str`, `edges`, `metadata`, etc.
-Responses can be large. Follow these rules to minimise token consumption.
+multi-language code graph (Python, JS/TS, Go, Java).
+
+**Default payloads are slim** (~10 fields per node: `id`, `name`, `node_type`,
+`language`, `file_path`, `repo`, `line_start`, `line_end`, `parent_id`,
+`edge_count`). They omit `code_str`, `edges`, `docstring`, `calls`/`called_by`,
+`metadata`, etc.
+
+Use **`include_code=true`** only when the user explicitly asks to see source
+or full node details.
 
 ## Tool inventory (smallest to largest response)
 
 | Tool | Typical size | When to use |
 |------|-------------|-------------|
 | `list_repos` | Tiny (list of strings) | First call -- check if repo is already indexed |
-| `get_node` | Small-medium (one node) | Lookup a specific symbol by name or id |
-| `get_class_tree` | Medium (class + methods) | Explore a class and its methods |
-| `get_neighbors` | Medium-large (node + N neighbors) | Find callers, callees, imports of a node |
-| `get_call_chain` | Medium-large (chain of nodes) | Trace call flow up or downstream |
-| `search_nodes` | Large (all matches, no pagination) | Filter nodes by type/name/file/language |
+| `get_node` | Small (one slim node) | Lookup a specific symbol by name or id |
+| `get_nodes_by_id` | Small-medium (batch slim nodes) | **Prefer over N× `get_node`** when you have several IDs |
+| `get_class_tree` | Medium (class + methods, slim) | Explore a class and its methods |
+| `get_neighbors` | Medium (slim root + N neighbors) | Find callers, callees, imports of a node |
+| `get_call_chain` | Medium (slim chain) | Trace call flow up or downstream |
+| `search_nodes` | Medium (paginated slim list) | Filter nodes; use `limit`/`offset` for paging |
+| `get_change_impact` | Medium | **PR/diff reviews** -- blast radius from changed file paths |
 | `parse_repo` | Small (summary only) | Index a repo for the first time |
 | `incremental_update` | Small (summary only) | Re-index after code changes |
-| `export_graph` | Very large (entire graph) | ONLY when user explicitly requests full export |
+| `export_graph` | Large if uncapped | **Capped at 5000 nodes**; returns error if larger. Prefer targeted queries |
 
 ## Decision flowchart
 
@@ -37,38 +45,51 @@ Responses can be large. Follow these rules to minimise token consumption.
      the user explicitly asks for a full re-parse.
 
 3. **Looking up a known symbol?**
-   Use `get_node(name="SymbolName", repo="repo-name")`. This returns exactly one
-   node. Do NOT use `search_nodes` when you already know the exact name.
+   Use `get_node(name="SymbolName", repo="repo-name")`. Do NOT use `search_nodes`
+   when you already know the exact name.
 
-4. **Exploring a class?**
+4. **Several node IDs?**
+   Use **`get_nodes_by_id(node_ids=[...])`** instead of looping `get_node`.
+
+5. **Reviewing a PR or changed files?**
+   Use **`get_change_impact(repo=..., changed_files=[...])`** for callers,
+   subclasses, and importers (when `IMPORTS` edges exist). Tune `max_depth` and
+   `min_confidence` as needed.
+
+6. **Exploring a class?**
    Prefer `get_class_tree(class_node_id)` over `get_neighbors`. It returns the
-   class node plus its direct method children -- compact and complete.
+   class plus its direct method children.
 
-5. **Finding callers or callees?**
+7. **Finding callers or callees?**
    Use `get_neighbors(node_id, edge_types=["CALLS"], min_confidence=0.5)` or
    `get_neighbors(node_id, edge_types=["CALLED_BY"], min_confidence=0.5)`.
    ALWAYS pass `edge_types` to filter -- omitting it returns every edge type.
    ALWAYS set `min_confidence >= 0.5` to prune speculative/dynamic edges.
 
-6. **Tracing a call chain?**
+8. **Tracing a call chain?**
    Use `get_call_chain(node_id, direction="downstream", max_depth=3, min_confidence=0.5)`.
    - Default `max_depth` is 5 -- override to **3** unless the user asks for deeper.
    - ALWAYS set `min_confidence >= 0.5`.
    - Choose `direction`: `"downstream"` follows CALLS; `"upstream"` follows CALLED_BY.
 
-7. **Searching across the repo?**
+9. **Searching across the repo?**
    Use `search_nodes` with **at least two filters**:
    - `node_type` (e.g. `"CLASS"`, `"FUNCTION"`, `"METHOD"`)
    - `name_pattern` (substring or fnmatch glob, e.g. `"*Handler"`)
    - `file_path` (substring match on stored path, e.g. `"parsers/"`)
-   - `language` (e.g. `"python"`, `"java"`)
+   - `language` (e.g. `"PYTHON"`, `"JAVA"`)
+
+   Results are **paginated**: default `limit=50`, `offset=0`. Use `offset` for the
+   next page; check `total` in the response.
 
    NEVER call `search_nodes` with only `repo` and no other filters -- this
-   returns every node in the repo and wastes thousands of tokens.
+   returns every node in the repo (still paginated, but wasteful).
 
-8. **Full graph export?**
-   ONLY call `export_graph` when the user explicitly asks for a full JSON/NetworkX
-   dump. This can return megabytes of data. Prefer targeted queries instead.
+10. **Full graph export?**
+    ONLY call `export_graph` when the user explicitly asks for a full JSON/NetworkX
+    dump. Exports **fail with `error: too_large`** if the repo has more than
+    **`max_nodes`** (default 5000). Default export uses **slim nodes**; set
+    `include_code=true` if full `code_str` is required.
 
 ## Anti-patterns to avoid
 
@@ -79,6 +100,8 @@ Responses can be large. Follow these rules to minimise token consumption.
 - Using `min_confidence=0.0` -- includes dynamic/speculative edges (noisy).
 - Calling `export_graph` to answer a question about a single node or class.
 - Re-running `parse_repo(mode="full")` when `incremental_update` suffices.
+- Using `include_code=true` by default -- wastes tokens.
+- Issuing many sequential `get_node` calls instead of `get_nodes_by_id`.
 
 ## Composing multi-step queries efficiently
 
@@ -99,4 +122,10 @@ Three calls, each small. Do NOT jump to `search_nodes` or `export_graph`.
 2. For each class_node_id -> get_class_tree(class_node_id)
 ```
 
-Two rounds. The search is filtered by type + pattern so it stays compact.
+Use `offset` if `total` > `limit`.
+
+**Example: "What could this PR affect?"**
+
+```
+get_change_impact(repo="...", changed_files=["src/foo.py", "lib/bar.go"])
+```

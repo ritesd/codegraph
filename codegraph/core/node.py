@@ -95,6 +95,20 @@ class BaseNode:
     def to_dict(self) -> dict[str, Any]:
         raise NotImplementedError
 
+    def to_slim_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "node_type": self.node_type.value,
+            "language": self.language.value,
+            "file_path": self.file_path,
+            "repo": self.repo,
+            "line_start": self.line_start,
+            "line_end": self.line_end,
+            "parent_id": self.parent_id,
+            "edge_count": len(self.edges),
+        }
+
 
 @dataclass
 class ClassNode(BaseNode):
