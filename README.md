@@ -12,7 +12,9 @@ CodeGraph parses repositories written in **Python, JavaScript, TypeScript, Go, a
 - **Optional vector store** -- Qdrant or Chroma bridge for embedding-based search.
 - **Optional LLM summaries** -- any OpenAI-compatible `/v1/chat/completions` endpoint.
 - **MCP server** -- exposes `parse_repo`, `get_node`, `get_neighbors`, `search_nodes`, `get_call_chain`, and more as MCP tools over stdio, SSE, or streamable-HTTP.
-- **CLI** -- `codegraph parse`, `query`, `export`, `serve`, `stats`, `list-repos`.
+- **Human-readable exports** -- JSON and GEXF/GraphML include `label` / `display_name` on nodes; edges include optional **provenance** (`EXTRACTED` / `INFERRED` / `AMBIGUOUS`) derived from confidence scores (see [docs/graphify-comparison.md](docs/graphify-comparison.md)).
+- **GRAPH_REPORT.md** -- deterministic markdown summary (hubs, types, languages, sample cross-file edges, suggested MCP queries) via `codegraph report` or `export --report`.
+- **CLI** -- `codegraph parse`, `query`, `export`, `report`, `serve`, `stats`, `list-repos`.
 
 ## Installation
 
@@ -41,8 +43,14 @@ codegraph parse /path/to/repo --mode full --export json
 # query a node by name
 codegraph query my-repo MyClassName --show-edges --show-code
 
-# export stored graph
+# export stored graph (readable JSON by default; use --no-readable for minimal keys)
 codegraph export my-repo --fmt json --json-mode graph
+
+# write only GRAPH_REPORT.md from SQLite
+codegraph report my-repo
+
+# parse and also emit GRAPH_REPORT.md in the output dir
+codegraph parse /path/to/repo --export json --report
 
 # start MCP server (SSE on 127.0.0.1:8765)
 codegraph serve --host 127.0.0.1 --port 8765 --transport sse
@@ -62,7 +70,9 @@ Run standalone:
 python -m codegraph.mcp.server --transport sse --host 0.0.0.0 --port 8765
 ```
 
-Available tools: `parse_repo`, `get_node`, `get_neighbors`, `search_nodes`, `get_class_tree`, `export_graph`, `incremental_update`, `list_repos`, `get_call_chain`.
+Available tools: `parse_repo`, `get_node`, `get_neighbors`, `search_nodes`, `get_class_tree`, `export_graph`, `incremental_update`, `list_repos`, `get_call_chain`, `get_nodes_by_id`, `get_change_impact`.
+
+`export_graph` accepts **`readable`** (default `true`): when enabled, JSON exports include `label` and `display_name` on each node and `provenance` on each edge. Set `readable=false` for a slimmer payload.
 
 ### Cursor MCP (`mcp.json`)
 
@@ -223,6 +233,25 @@ CODEGRAPH_EMBEDDING_MODEL=nomic-embed-text
 ```
 
 ## Visualising the Code Graph
+
+### Readable JSON and GEXF
+
+- **JSON** (`codegraph export … --fmt json`): each node has **`label`** (symbol name) and **`display_name`** (name plus file basename and line). Each edge includes **`provenance`**: `EXTRACTED` (high confidence), `INFERRED` (medium), `AMBIGUOUS` (low / speculative). `meta.export_readable` records the mode. Use `codegraph export … --no-readable` to omit these fields.
+- **GEXF / GraphML**: node attributes include `label`, `display_name`, `node_type`, `language`, `file_path`, `repo`, and line numbers so Gephi can colour/filter without UUID-only labels. Edges carry `provenance` alongside `confidence`.
+
+For a comparison with the [graphify](https://github.com/safishamsi/graphify) output model (reports, multimodal scope), see [docs/graphify-comparison.md](docs/graphify-comparison.md).
+
+### GRAPH_REPORT.md
+
+After parsing or from the DB:
+
+```bash
+codegraph report my-repo
+# or
+codegraph export my-repo --fmt json --report
+```
+
+Writes `<repo>_GRAPH_REPORT.md` under `CODEGRAPH_OUTPUT_DIR` (default `./codegraph_output`): overview counts, hub symbols, sample cross-file edges, and copy-paste MCP query examples.
 
 ### Quick stats (terminal)
 

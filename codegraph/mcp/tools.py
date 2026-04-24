@@ -164,8 +164,9 @@ def register_tools(mcp: FastMCP) -> None:
         json_mode: str = "graph",
         max_nodes: int = 5000,
         include_code: bool = False,
+        readable: bool = True,
     ) -> dict:
-        """Export stored graph as JSON dict or NetworkX node-link structure. Capped at max_nodes; slim nodes unless include_code=true."""
+        """Export stored graph as JSON dict or NetworkX node-link structure. Capped at max_nodes; slim nodes unless include_code=true. When readable=true, nodes include label/display_name and edges include provenance (EXTRACTED/INFERRED/AMBIGUOUS)."""
         store = SQLiteStore(CONFIG.sqlite_path)
         nodes = store.get_by_repo(repo)
         if len(nodes) > max_nodes:
@@ -185,7 +186,9 @@ def register_tools(mcp: FastMCP) -> None:
             parsed_at="",
         )
         if fmt == "json":
-            return JsonExporter().export(cg, mode=json_mode, include_code=include_code)
+            return JsonExporter().export(
+                cg, mode=json_mode, include_code=include_code, readable=readable
+            )
         G = NetworkXExporter().export(cg)
         import networkx as nx  # noqa: PLC0415
 

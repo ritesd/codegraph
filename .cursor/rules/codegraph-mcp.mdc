@@ -9,10 +9,11 @@ alwaysApply: false
 You have access to a CodeGraph MCP server that exposes tools for querying a
 multi-language code graph (Python, JS/TS, Go, Java).
 
-**Default payloads are slim** (~10 fields per node: `id`, `name`, `node_type`,
+**Default payloads are slim** (~12 fields per node: `id`, `name`, `node_type`,
 `language`, `file_path`, `repo`, `line_start`, `line_end`, `parent_id`,
-`edge_count`). They omit `code_str`, `edges`, `docstring`, `calls`/`called_by`,
-`metadata`, etc.
+`edge_count`, plus **`label`** and **`display_name`** when `export_graph(..., readable=true)`).
+Edges in exports include **`provenance`** (`EXTRACTED`/`INFERRED`/`AMBIGUOUS`) in readable mode.
+They omit `code_str`, `edges`, `docstring`, `calls`/`called_by`, `metadata`, etc.
 
 Use **`include_code=true`** only when the user explicitly asks to see source
 or full node details.
@@ -31,7 +32,7 @@ or full node details.
 | `get_change_impact` | Medium | **PR/diff reviews** -- blast radius from changed file paths |
 | `parse_repo` | Small (summary only) | Index a repo for the first time |
 | `incremental_update` | Small (summary only) | Re-index after code changes |
-| `export_graph` | Large if uncapped | **Capped at 5000 nodes**; returns error if larger. Prefer targeted queries |
+| `export_graph` | Large if uncapped | **Capped at 5000 nodes**; returns error if larger. Prefer targeted queries. Default `readable=true` adds `label`/`display_name` and edge `provenance`; set `readable=false` to trim |
 
 ## Decision flowchart
 

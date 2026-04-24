@@ -10,12 +10,27 @@ import os
 from codegraph.config import CONFIG, load_config
 from codegraph.core.graph import GraphBuilder
 from codegraph.llm.summarizer import Summarizer
+from codegraph.output.graph_report import write_graph_report
 from codegraph.output.json_exporter import JsonExporter
 from codegraph.output.networkx_exporter import NetworkXExporter
 from codegraph.storage.sqlite_store import SQLiteStore
 from codegraph.storage.vector_store import VectorStore
 
 log = logging.getLogger("codegraph")
+
+
+def _codegraph_from_stored_nodes(repo: str, nodes: list) -> "CodeGraph":
+    from codegraph.core.graph import CodeGraph
+
+    return CodeGraph(
+        repo=repo,
+        repo_root="",
+        git_hash="",
+        nodes=nodes,
+        language_summary={},
+        parse_errors=[],
+        parsed_at="",
+    )
 
 
 def _setup_logging() -> None:
@@ -33,6 +48,11 @@ def main() -> None:
     p_parse.add_argument("--export", choices=("json", "networkx", "none"), default="none")
     p_parse.add_argument("--export-fmt", choices=("graph", "flat"), default="graph")
     p_parse.add_argument("--output-dir", default=CONFIG.output_dir)
+    p_parse.add_argument(
+        "--report",
+        action="store_true",
+        help="Also write GRAPH_REPORT.md (deterministic hub/type summary) to output dir",
+    )
     p_parse.add_argument("--llm-endpoint", default="")
     p_parse.add_argument("--embedding-endpoint", default="")
     p_parse.add_argument("--vector-db-url", default="")
@@ -49,6 +69,23 @@ def main() -> None:
     p_exp.add_argument("--fmt", choices=("json", "networkx"), default="json")
     p_exp.add_argument("--json-mode", choices=("flat", "graph"), default="graph")
     p_exp.add_argument("--output-dir", default=CONFIG.output_dir)
+    p_exp.add_argument(
+        "--report",
+        action="store_true",
+        help="Also write GRAPH_REPORT.md alongside the export",
+    )
+    p_exp.add_argument(
+        "--no-readable",
+        action="store_true",
+        help="JSON export: omit label/display_name on nodes and provenance on edges",
+    )
+
+    p_report = sub.add_parser(
+        "report",
+        help="Write GRAPH_REPORT.md from the stored graph (SQLite)",
+    )
+    p_report.add_argument("repo")
+    p_report.add_argument("--output-dir", default=CONFIG.output_dir)
 
     p_serve = sub.add_parser("serve", help="Run MCP server")
     p_serve.add_argument("--host", default=CONFIG.mcp_host)
@@ -94,6 +131,10 @@ def main() -> None:
         elif args.export == "networkx":
             out = os.path.join(args.output_dir, f"{g.repo}.gexf")
             NetworkXExporter().to_file(g, out, fmt="gexf")
+        if args.report:
+            report_path = os.path.join(args.output_dir, f"{g.repo}_GRAPH_REPORT.md")
+            write_graph_report(g, report_path)
+            log.info("Wrote %s", report_path)
         print(json.dumps({"repo": g.repo, "nodes": len(g.nodes), "errors": len(g.parse_errors)}))
     elif args.cmd == "query":
         store = SQLiteStore(cfg.sqlite_path)
@@ -112,21 +153,30 @@ def main() -> None:
         store = SQLiteStore(cfg.sqlite_path)
         store.init_db()
         nodes = store.get_by_repo(args.repo)
-        from codegraph.core.graph import CodeGraph
-
-        cg = CodeGraph(
-            repo=args.repo,
-            repo_root="",
-            git_hash="",
-            nodes=nodes,
-            language_summary={},
-            parse_errors=[],
-            parsed_at="",
-        )
+        cg = _codegraph_from_stored_nodes(args.repo, nodes)
+        readable = not args.no_readable
         if args.fmt == "json":
-            JsonExporter().to_file(cg, os.path.join(args.output_dir, f"{args.repo}.json"), mode=args.json_mode)
+            JsonExporter().to_file(
+                cg,
+                os.path.join(args.output_dir, f"{args.repo}.json"),
+                mode=args.json_mode,
+                readable=readable,
+            )
         else:
             NetworkXExporter().to_file(cg, os.path.join(args.output_dir, f"{args.repo}.gexf"))
+        if args.report:
+            report_path = os.path.join(args.output_dir, f"{args.repo}_GRAPH_REPORT.md")
+            write_graph_report(cg, report_path)
+            log.info("Wrote %s", report_path)
+    elif args.cmd == "report":
+        store = SQLiteStore(cfg.sqlite_path)
+        store.init_db()
+        nodes = store.get_by_repo(args.repo)
+        cg = _codegraph_from_stored_nodes(args.repo, nodes)
+        report_path = os.path.join(args.output_dir, f"{args.repo}_GRAPH_REPORT.md")
+        write_graph_report(cg, report_path)
+        log.info("Wrote %s", report_path)
+        print(json.dumps({"repo": args.repo, "report": report_path, "nodes": len(nodes)}))
     elif args.cmd == "serve":
         from codegraph.mcp.server import main as serve_main
 

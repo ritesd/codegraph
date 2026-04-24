@@ -7,6 +7,8 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from codegraph.core.graph import CodeGraph
+from codegraph.output.edge_provenance import edge_provenance
+from codegraph.output.export_labels import node_display_name
 
 if TYPE_CHECKING:
     import networkx as nx
@@ -21,22 +23,39 @@ class NetworkXExporter:
     @staticmethod
     def _sanitize(attrs: dict[str, Any]) -> dict[str, Any]:
         """Keep only GEXF-safe scalar values; drop None, lists, dicts."""
-        return {k: v for k, v in attrs.items() if isinstance(v, _GEXF_SAFE)}
+        return {k: v for k, v in attrs.items() if isinstance(v, _GEXF_SAFE) and v is not None}
+
+    def _node_viz_attrs(self, n: Any) -> dict[str, Any]:
+        """Scalars for GEXF/Gephi: human label + filters."""
+        return {
+            "id": n.id,
+            "label": n.name,
+            "display_name": node_display_name(n),
+            "name": n.name,
+            "node_type": n.node_type.value,
+            "language": n.language.value,
+            "file_path": n.file_path or "",
+            "repo": n.repo,
+            "line_start": int(n.line_start),
+            "line_end": int(n.line_end),
+        }
 
     def export(self, graph: CodeGraph) -> Any:
         import networkx as nx  # noqa: PLC0415 — lazy import
 
         G = nx.DiGraph()
         for n in graph.nodes:
-            G.add_node(n.id, **self._sanitize(n.to_dict()))
+            base = self._sanitize(self._node_viz_attrs(n))
+            G.add_node(n.id, **base)
         for n in graph.nodes:
             for e in n.edges:
                 G.add_edge(
                     n.id,
                     e.target_id,
                     edge_type=e.edge_type.value,
-                    confidence=e.confidence,
-                    resolved=e.resolved,
+                    confidence=float(e.confidence),
+                    resolved=bool(e.resolved),
+                    provenance=edge_provenance(e.confidence),
                 )
         return G
 
